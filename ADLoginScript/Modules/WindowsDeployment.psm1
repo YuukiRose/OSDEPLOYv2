@@ -36,7 +36,7 @@ function Start-WindowsDeployment {
 Windows Deployment Configuration:
 --------------------------------
 Windows Version: $WindowsVersion
-Edition: $(if ($ImageIndex -eq 3) {"Professional"} else {"Enterprise"})
+Edition: $(if ($ImageIndex -eq 3) {"Enterprise"} else {"Professional"})
 Image Path: $ImagePath
 Image Type: $ImageType
 Image Index: $ImageIndex

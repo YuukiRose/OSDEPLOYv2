@@ -116,29 +116,37 @@ function Show-OSSelectionGUI {
                     $button.Add_Click({
                         $selectedVersion = $this.Text
                         $selectedImage = $this.Tag
-                        $windowsVersion = $versionComboBox.SelectedItem  # Get the selected Windows version (10 or 11)
+                        $windowsVersion = $versionComboBox.SelectedItem
                         
                         if ($selectedImage) {
-                            $script:selectedPath = $selectedImage.Path
-                            $editionIndex = Show-WindowsEditionDialog
+                            Write-Host "Debug - Image Path: $($selectedImage.Path)"  # Add debug output
+                            Write-Host "Debug - Image Type: $($selectedImage.Type)"  # Add debug output
                             
-                            if ($editionIndex) {
-                                # Get customer information
+                            # Call Show-WindowsEditionDialog and store result directly as integer
+                            [int]$editionIndex = Show-WindowsEditionDialog
+                            Write-Host "Debug - Edition Index: $editionIndex"  # Add debug output
+                            
+                            if ($editionIndex -gt 0) {
                                 $customerInfo = Show-CustomerInfoDialog
                                 
                                 if ($customerInfo) {
                                     Import-Module "$PSScriptRoot\WindowsDeployment.psm1" -Force
-                                    $deploymentParams = @{
+                                    $params = @{
                                         ImagePath = $selectedImage.Path
                                         ImageType = $selectedImage.Type
                                         ImageIndex = $editionIndex
-                                        WindowsVersion = $windowsVersion  # This should now be properly set
+                                        WindowsVersion = $windowsVersion
                                         CustomerName = $customerInfo.CustomerName
                                         OrderNumber = $customerInfo.OrderNumber
                                     }
-                                    Start-WindowsDeployment @deploymentParams
+                                    Write-Host "Debug - Deployment Parameters:" # Add debug output
+                                    $params | Format-Table | Out-String | Write-Host
+                                    
+                                    Start-WindowsDeployment @params
                                 }
                             }
+                        } else {
+                            Write-Host "Debug - Selected Image is null!"  # Add debug output
                         }
                         $form.Close()
                     })
@@ -179,6 +187,9 @@ function Show-OSSelectionGUI {
 function Show-WindowsEditionDialog {
     param([string]$WimPath)
     
+    # Initialize with explicit integer type
+    [int]$script:selectedIndex = 0
+    
     $editionForm = New-Object System.Windows.Forms.Form
     $editionForm.Text = "Select Windows Edition"
     $editionForm.Size = New-Object System.Drawing.Size(300, 150)
@@ -189,7 +200,7 @@ function Show-WindowsEditionDialog {
     $proButton.Size = New-Object System.Drawing.Size(200, 30)
     $proButton.Text = "Professional"
     $proButton.Add_Click({
-        $script:selectedIndex = 3
+        $script:selectedIndex = 5
         $editionForm.Close()
     })
     
@@ -198,13 +209,15 @@ function Show-WindowsEditionDialog {
     $enterpriseButton.Size = New-Object System.Drawing.Size(200, 30)
     $enterpriseButton.Text = "Enterprise"
     $enterpriseButton.Add_Click({
-        $script:selectedIndex = 5
+        $script:selectedIndex = 3
         $editionForm.Close()
     })
     
     $editionForm.Controls.AddRange(@($proButton, $enterpriseButton))
     $editionForm.ShowDialog()
-    return $script:selectedIndex
+    
+    Write-Host "Debug - Returning Index: $script:selectedIndex"  # Add debug output
+    return $script:selectedIndex  # Return the integer value
 }
 
 function Show-CustomerInfoDialog {

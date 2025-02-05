@@ -387,20 +387,96 @@ function Initialize-WindowsRecovery {
 function Start-OSDeployment {
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$true)]
+        [string]$ImagePath,
+        
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("wim", "esd")]
+        [string]$ImageType,
+        
+        [Parameter(Mandatory=$true)]
+        [object]$ImageIndex,  # Changed type to object to handle array input
+
+        [Parameter(Mandatory=$true)]
+        [int]$OSIndex,  # Add OSIndex parameter
+        
         [Parameter(Mandatory=$false)]
         [string]$CustomerName = "NOCUSTOMER",
+        
         [Parameter(Mandatory=$false)]
         [string]$OrderNumber = (Get-Date -Format "yyyyMMdd"),
+        
         [Parameter(Mandatory=$false)]
-        [hashtable]$ImageSelection,
-        [Parameter(Mandatory=$false)]
-        [string]$UnattendPath = $Script:UnattendPath
+        [hashtable]$ImageSelection
     )
 
     try {
         # Initialize logging first
         Initialize-Logging
         Write-Log -Message "Starting OS Deployment preparation" -Type Info -Component "OSDeployment"
+
+        # Add this near the start of the function, after parameter validation
+        Write-Debug "Debug - Raw ImageIndex value: $($ImageIndex | ConvertTo-Json)"
+        
+        # Handle array or scalar ImageIndex
+        if ($ImageIndex -is [array]) {
+            $convertedIndex = [int]($ImageIndex[0])
+        } else {
+            $convertedIndex = [int]$ImageIndex
+        }
+        
+        Write-Debug "Debug - Converted ImageIndex to: $convertedIndex"
+        
+        # Validate the converted index
+        if ($convertedIndex -lt 1) {
+            Write-Warning "Invalid image index detected, using default index 5"
+            $convertedIndex = 5
+        }
+        
+        # Replace the original $ImageIndex with our converted value
+        $ImageIndex = $convertedIndex
+
+        # Validate and synchronize indices
+        Write-Debug "Debug - Initial ImageIndex: $ImageIndex"
+        Write-Debug "Debug - Initial OSIndex: $OSIndex"
+
+        # Validate OSIndex and map to correct ImageIndex if needed
+        if ($OSIndex -eq 0) {
+            Write-Debug "Debug - OSIndex is 0, adjusting to use ImageIndex $ImageIndex"
+            $OSIndex = $ImageIndex
+        } elseif ($ImageIndex -eq 5 -and $OSIndex -ne 3) {
+            Write-Debug "Debug - Adjusting ImageIndex to match OSIndex"
+            $ImageIndex = if ($OSIndex -eq 1) { 6 } else { 5 }
+        }
+
+        Write-Debug "Debug - Final ImageIndex: $ImageIndex"
+        Write-Debug "Debug - Final OSIndex: $OSIndex"
+        Write-Debug "Debug - Edition: $(if ($OSIndex -eq 3) {'Enterprise'} else {'Professional'})"
+
+        # Show deployment confirmation with OSIndex info
+        $confirmMessage = @"
+Starting Windows Deployment:
+--------------------------
+Image Path: $ImagePath
+Image Type: $ImageType
+Image Index: $ImageIndex
+OS Edition: $(if ($OSIndex -eq 3) {"Enterprise"} else {"Professional"})
+Customer: $CustomerName
+Order: $OrderNumber
+
+Continue with deployment?
+"@
+        $result = [System.Windows.Forms.MessageBox]::Show(
+            $confirmMessage,
+            "Confirm Deployment",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Question
+        )
+
+        if ($result -eq [System.Windows.Forms.DialogResult]::No) {
+            Write-Log -Message "Deployment cancelled by user" -Type Info -Component "OSDeployment"
+            return $false
+        }
 
         # Get AD credentials before starting deployment
         $credentials = Prompt-ForCredentials
@@ -434,6 +510,20 @@ function Start-OSDeployment {
         # Extract image info
         $ImagePath = $ImageSelection.Path
         $ImageIndex = $ImageSelection.ImageIndex
+
+        try {
+            $imageIndex = [int]($imageIndex | Select-Object -First 1)
+            Write-Debug "Debug - Image Index converted to: $imageIndex"
+        }
+        catch {
+            Write-Error "Failed to convert image index: $_"
+            $imageIndex = 5  # Default to index 5 if conversion fails
+        }
+        
+        if ($null -eq $imageIndex -or $imageIndex -lt 1) {
+            Write-Warning "Invalid image index detected, using default index 5"
+            $imageIndex = 5
+        }
 
         # Verify prerequisites
         if (-not (Test-DeploymentPrerequisites)) {
